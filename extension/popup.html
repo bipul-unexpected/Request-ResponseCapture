@@ -1,0 +1,60 @@
+<!-- File: brave-nettap/extension/popup.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Bench NetTap</title>
+  <style>
+    body {
+      width: 310px;
+      margin: 0;
+      padding: 14px;
+      background: #111318;
+      color: #e5e7eb;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+    }
+    h3 {
+      margin: 0 0 8px 0;
+      font-size: 14px;
+      color: #38bdf8;
+    }
+    .stat {
+      background: #1f242d;
+      padding: 10px;
+      border-radius: 6px;
+      margin-bottom: 10px;
+      line-height: 1.5;
+      border: 1px solid #374151;
+    }
+    .err {
+      color: #f87171;
+      margin-top: 6px;
+      font-size: 11px;
+    }
+    button {
+      width: 100%;
+      padding: 9px;
+      margin-bottom: 6px;
+      border: none;
+      border-radius: 5px;
+      font-family: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    #btnStart { background: #10b981; color: #052e16; }
+    #btnExportLive { background: #3b82f6; color: #eff6ff; }
+    #btnStopExport { background: #ef4444; color: #fef2f2; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <h3>Bench NetTap // JSON Exporter</h3>
+  <div class="stat" id="statusBox">Checking active tab...</div>
+  <button id="btnStart">1. Attach &amp; Start Capture</button>
+  <button id="btnExportLive" disabled>2. Snapshot JSON (Keep Recording)</button>
+  <button id="btnStopExport" disabled>3. Stop &amp; Export Full JSON</button>
+  <div class="err" id="errorBox"></div>
+  <script src="popup.js"></script>
+</body>
+</html>

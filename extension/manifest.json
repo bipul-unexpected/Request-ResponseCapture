@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Bench NetTap — Full Request/Response & Analytics JSON Exporter",
+  "version": "1.1.0",
+  "description": "Attaches CDP Network debugger to active Brave tab, capturing all requests, response bodies, SSE streams, WebSockets, and network analytics to JSON.",
+  "permissions": [
+    "debugger",
+    "tabs",
+    "activeTab",
+    "downloads",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Bench NetTap JSON Exporter"
+  }
+}
