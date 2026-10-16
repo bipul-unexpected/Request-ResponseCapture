@@ -39,8 +39,17 @@ async function refreshStatus() {
 btnStart.addEventListener("click", async () => {
   errorBox.textContent = "";
   const tab = await getActiveTab();
+  if (!tab || !tab.id) {
+    errorBox.textContent = "No active tab found.";
+    return;
+  }
   chrome.runtime.sendMessage({ cmd: "START_CAPTURE", tabId: tab.id, tabUrl: tab.url }, (res) => {
-    if (!res?.ok) errorBox.textContent = res?.error || "Failed to attach debugger.";
+    if (chrome.runtime.lastError || !res?.ok) {
+      errorBox.textContent = chrome.runtime.lastError?.message || res?.error || "Failed to attach debugger.";
+    } else {
+      // Auto reload tab so CDP captures all initial boot requests cleanly
+      chrome.tabs.reload(tab.id);
+    }
     refreshStatus();
   });
 });

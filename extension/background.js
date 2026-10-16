@@ -15,17 +15,24 @@ function createSessionState(tabId, tabUrl) {
   };
 }
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
     try {
+      let targetTabId = msg.tabId;
+      if (!targetTabId) {
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (activeTab) targetTabId = activeTab.id;
+      }
+
       if (msg.cmd === "START_CAPTURE") {
-        sendResponse(await startCapture(msg.tabId, msg.tabUrl));
+        const tab = await chrome.tabs.get(targetTabId);
+        sendResponse(await startCapture(targetTabId, tab.url));
       } else if (msg.cmd === "EXPORT_LIVE") {
-        sendResponse(await exportCurrentSession(msg.tabId, false));
+        sendResponse(await exportCurrentSession(targetTabId, false));
       } else if (msg.cmd === "STOP_AND_EXPORT") {
-        sendResponse(await exportCurrentSession(msg.tabId, true));
+        sendResponse(await exportCurrentSession(targetTabId, true));
       } else if (msg.cmd === "GET_STATUS") {
-        const state = sessions.get(msg.tabId);
+        const state = sessions.get(targetTabId);
         sendResponse({
           ok: true,
           recording: Boolean(state),
@@ -49,10 +56,13 @@ async function startCapture(tabId, tabUrl) {
   const target = { tabId };
   await chrome.debugger.attach(target, "1.3");
   await chrome.debugger.sendCommand(target, "Network.enable", {
-    maxTotalBufferSize: 100 * 1024 * 1024,    // 100 MB total buffer
-    maxResourceBufferSize: 25 * 1024 * 1024,  // 25 MB per resource
-    maxPostDataSize: 10 * 1024 * 1024         // 10 MB POST payload capture
+    maxTotalBufferSize: 150 * 1024 * 1024,
+    maxResourceBufferSize: 30 * 1024 * 1024,
+    maxPostDataSize: 15 * 1024 * 1024
   });
+
+  // Enable Page domain to catch all navigations / reloads
+  try { await chrome.debugger.sendCommand(target, "Page.enable"); } catch (_) {}
 
   sessions.set(tabId, createSessionState(tabId, tabUrl));
   return { ok: true, status: "recording_started" };
@@ -116,15 +126,6 @@ chrome.debugger.onEvent.addListener(async (source, method, params) => {
       break;
     }
 
-    case "Network.requestWillBeSentExtraInfo": {
-      const entry = reqMap.get(params.requestId);
-      if (entry) {
-        entry.rawRequestHeadersExtra = params.headers || {};
-        entry.associatedCookies = params.associatedCookies || [];
-      }
-      break;
-    }
-
     case "Network.responseReceived": {
       const { requestId, response, type } = params;
       const entry = reqMap.get(requestId);
@@ -141,15 +142,6 @@ chrome.debugger.onEvent.addListener(async (source, method, params) => {
       entry.fromServiceWorker = Boolean(response.fromServiceWorker);
       entry.responseHeaders = response.headers || {};
       entry.timing = response.timing || null;
-      break;
-    }
-
-    case "Network.responseReceivedExtraInfo": {
-      const entry = reqMap.get(params.requestId);
-      if (entry) {
-        entry.rawResponseHeadersExtra = params.headers || {};
-        entry.statusCodeExtra = params.statusCode;
-      }
       break;
     }
 
@@ -177,7 +169,7 @@ chrome.debugger.onEvent.addListener(async (source, method, params) => {
           }
         }
       } catch (bodyErr) {
-        entry.responseBodyNote = String(bodyErr?.message || "No body buffered (redirect, 204, or preflight)");
+        entry.responseBodyNote = String(bodyErr?.message || "No body buffered");
       }
       break;
     }
@@ -214,9 +206,8 @@ chrome.debugger.onEvent.addListener(async (source, method, params) => {
         ws.frames.push({
           direction: method.endsWith("Sent") ? "SENT" : "RECEIVED",
           timestamp: params.timestamp,
-          opcode: params.response?.opcode,
-          payloadData: params.response?.payloadData,
-          payloadJson: tryParseJson(params.response?.payloadData)
+          payloadData: params.response?.payloadData || params.data || null,
+          payloadJson: tryParseJson(params.response?.payloadData || params.data)
         });
       }
       break;
@@ -227,17 +218,14 @@ chrome.debugger.onEvent.addListener(async (source, method, params) => {
 chrome.debugger.onDetach.addListener((source, reason) => {
   const state = sessions.get(source.tabId);
   if (state) state.detachReason = reason;
+  sessions.delete(source.tabId);
 });
 
 function tryParseJson(str) {
   if (typeof str !== "string" || !str) return null;
   const trimmed = str.trim();
   if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
-    try {
-      return JSON.parse(trimmed);
-    } catch (_) {
-      return null;
-    }
+    try { return JSON.parse(trimmed); } catch (_) { return null; }
   }
   return null;
 }
@@ -327,7 +315,7 @@ function computeAnalytics(state) {
 
 async function exportCurrentSession(tabId, detachAfter) {
   const state = sessions.get(tabId);
-  if (!state) return { ok: false, error: "No active session on this tab." };
+  if (!state) return { ok: false, error: "No active capture session on this tab." };
 
   if (detachAfter) {
     try { await chrome.debugger.detach({ tabId }); } catch (_) {}
